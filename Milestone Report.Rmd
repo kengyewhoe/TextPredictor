@@ -68,14 +68,14 @@ The data is big and will take a long time to load and be processed therefore sub
 
 ```{r, eval=FALSE}
 set.seed(1234567)
-subTwitter <- sample(twitterText, size = 30000, replace = TRUE)
-subBlogs <- sample(blogsText, size = 30000, replace = TRUE)
-subNews <- sample(newsText, size = 30000, replace = TRUE)
+subTwitter <- sample(twitterText, size = 10000, replace = TRUE)
+subBlogs <- sample(blogsText, size = 10000, replace = TRUE)
+subNews <- sample(newsText, size = 10000, replace = TRUE)
 sampleTotal <- c(subTwitter, subBlogs, subNews)
 length(sampleTotal)
 writeLines(sampleTotal, "./sampleTotal.txt")
 ```
-Each file contributes 30,000 lines of text compile a new text file called sampleTotal.txt which has a total of 90,000 lines.
+Each file contributes 10,000 lines of text compile a new text file called sampleTotal.txt which has a total of 30,000 lines.
 
 ## Cleaning and exploring the data
 
@@ -99,8 +99,8 @@ textCorpus <- tm_map(textCorpus, content_transformer(tolower))
 textCorpus <- tm_map(textCorpus, content_transformer(removePunctuation), preserve_intra_word_dashes=TRUE)  
 
 #Removing profanity 
-#profanity = readLines("./badWords.txt")
-#textCorpus <- tm_map(textCorpus, removeWords, profanity)
+profanity = readLines("./badWords.txt")
+textCorpus <- tm_map(textCorpus, removeWords, profanity)
 
 #Removing numbers
 textCorpus <- tm_map(textCorpus, content_transformer(removeNumbers))
