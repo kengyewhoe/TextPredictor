@@ -1,0 +1,12 @@
+name: TextPredictorAPP
+title: TextPredictorAPP
+username:
+account: kengyewhoe
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 3099522
+bundleId: 3784733
+url: https://kengyewhoe.shinyapps.io/TextPredictorAPP/
+when: 1603739255.6671
+asMultiple: FALSE
+asStatic: FALSE

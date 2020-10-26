@@ -1,0 +1,292 @@
+---
+title: "Data Science Capstone Milestone Report"
+author: "Keng Yew Hoe"
+date: "10/19/2020"
+output: html_document
+---
+
+# INTRODUCTION
+This project is to develop a predictive model for text starting with a realy large, unstructured database of the english language. This milestone report covers the tasks done up till week 2 which includes cleaning the data and doing exploratory data analysis. 
+
+# R LIBRARIES
+
+Libraries used for this project.
+
+```{r, echo=TRUE, message = FALSE, warning= FALSE}
+library(stringi) # stats files
+library(NLP); library(openNLP)
+library(tm) # Text mining
+library(rJava)
+library(RWeka) # tokenizer - create unigrams, bigrams, trigrams
+library(RWekajars)
+library(SnowballC) # Stemming
+library(RColorBrewer) # Color palettes
+library(qdap)
+library(ggplot2) #visualization
+
+```
+
+## The data
+From the dataset given, only english language data will be used for this project. 
+
+ * en_US.blogs.txt
+ * en_US.news.txt
+ * en_US.twitter.txt.
+
+The data was downloaded from Coursera to local machine and will be read from local disk.
+
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+#Reading the data from my working directory
+blogsText <- readLines("./final/en_US/en_US.blogs.txt", encoding = "UTF-8", skipNul = T)
+newsText <- file("./final/en_US/en_US.news.txt" , open = "rb")
+newsText <- readLines(newsText,encoding = "UTF-8", skipNul = T) #supposed to be 1010242 however only 77259 lines are read hence the different reading method
+twitterText <- readLines("./final/en_US/en_US.twitter.txt", encoding = "UTF-8", skipNul = T)
+
+#Getting some file data
+file.info("./final/en_US/en_US.blogs.txt")$size / 1024^2
+file.info("./final/en_US/en_US.news.txt")$size  / 1024^2 
+file.info("./final/en_US/en_US.twitter.txt")$size / 1024^2
+
+#Number of lines 
+length(blogsText)
+length(newsText)
+length(twitterText)
+
+#Number of words
+sum(stri_count_words(blogsText))
+sum(stri_count_words(newsText))  
+sum(stri_count_words(twitterText))
+
+## The length of the longest line 
+max(nchar(blogsText)) 
+max(nchar(newsText))
+max(nchar(twitterText))
+```
+##  Creating a sub dataset
+
+The data is big and will take a long time to load and be processed therefore subsets are created for test and application.
+
+```{r, eval=FALSE}
+set.seed(1234567)
+subTwitter <- sample(twitterText, size = 30000, replace = TRUE)
+subBlogs <- sample(blogsText, size = 30000, replace = TRUE)
+subNews <- sample(newsText, size = 30000, replace = TRUE)
+sampleTotal <- c(subTwitter, subBlogs, subNews)
+length(sampleTotal)
+writeLines(sampleTotal, "./sampleTotal.txt")
+```
+Each file contributes 30,000 lines of text compile a new text file called sampleTotal.txt which has a total of 90,000 lines.
+
+## Cleaning and exploring the data
+
+Using tm package for cleaning the data.
+- removing whitespace
+- removing punctuation
+- convert to lowercase
+- remove profanity
+
+Profanity Words data is from Luis von Ahn's research group at CMU (http://www.cs.cmu.edu/~biglou/resources/).
+The library used here is TM that loads the corpus into memory and allow calls to the methods to clean the data.
+
+```{r, echo=TRUE, message = F, warning= FALSE}
+textCon <- file("./sampleTotal.txt")
+textCorpus <- readLines(textCon)
+textCorpus <- Corpus(VectorSource(textCorpus)) #reading the data as a list
+
+#Cleaning the data with the tm package
+textCorpus <- tm_map(textCorpus, content_transformer(function(x) iconv(x, "UTF-8", sub="byte")))
+textCorpus <- tm_map(textCorpus, content_transformer(tolower))
+textCorpus <- tm_map(textCorpus, content_transformer(removePunctuation), preserve_intra_word_dashes=TRUE)  
+
+#Removing profanity 
+#profanity = readLines("./badWords.txt")
+#textCorpus <- tm_map(textCorpus, removeWords, profanity)
+
+#Removing numbers
+textCorpus <- tm_map(textCorpus, content_transformer(removeNumbers))
+#Removing URLs
+removeURL <- function(x) gsub("http[[:alnum:]]*","", x)
+textCorpus <- tm_map(textCorpus, content_transformer(removeURL))
+#Removing stop wordsd (a, as , at , so, etc...)
+textCorpus <- tm_map(textCorpus, removeWords, stopwords("english"))
+#Convert corpus to plain text document
+textCorpus <- tm_map(textCorpus, PlainTextDocument)
+#save in individual text file
+writeCorpus(textCorpus)
+```
+
+## Tokenization of the Data
+
+Let's read the text to break it into words and sentences, and to turn it into n-grams. These are all called tokenization because we are breaking up the text into units of meaning, called tokens.
+
+In Natural Language Processing (NLP),  *n*-gram is a contiguous sequence of n items from a given sequence of text or speech. Unigrams are single words. Bigrams are two words combinations. Trigrams are three-word combinations.
+
+The tokenizer method is allowed in R using the package RWeka. The following function is used to extract 1-grams, 2-grams, 3-grams and 4-grams from the text Corpus using RWeka.
+
+Make 3 types of tokenizer. a word, two words and three words.
+```{r cache=TRUE}
+#Defining the function
+library(RWeka)
+uniGramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 1, max = 1,delimiters = " \\r\\n\\t.,;:\"()?!"))
+biGramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 2, max = 2,delimiters = " \\r\\n\\t.,;:\"()?!"))
+triGramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 3, max = 3,delimiters = " \\r\\n\\t.,;:\"()?!"))
+quadGramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 4, max = 4,delimiters = " \\r\\n\\t.,;:\"()?!"))
+```
+
+```{r, echo=TRUE}
+## Tokenizer function to get unigram
+unigram <- uniGramTokenizer(textCorpus)
+unigram <- data.frame(table(unigram))
+unigram <- unigram[order(unigram$Freq,decreasing = TRUE),]
+names(unigram) <- c("word1", "freq")
+head(unigram)
+unigram$word1 <- as.character(unigram$word1)
+write.csv(unigram[unigram$freq > 1,],"unigram.csv",row.names=F)
+unigram <- read.csv("unigram.csv",stringsAsFactors = F)
+saveRDS(unigram, file = "unigram.RData")
+```
+
+### Plotting UNIGRAM
+
+```{r, echo=TRUE, message = FALSE}
+## Unigram Plot
+library(ggplot2)
+unigram <- readRDS("unigram.RData")
+unigramPlot <- ggplot(data=unigram[1:10,], aes(x = reorder(word1,freq), y = freq))+
+  geom_bar(stat="identity", fill = "steelblue")  +
+  ggtitle("Frequently used Words") + 
+  geom_text(data = unigram[1:10,], aes(x = word1, y = freq, label = freq), hjust=5, position = "identity") + 
+  labs(y="Frequency",x="Words") + coord_flip()
+unigramPlot
+``` 
+
+### Obtaining the biGrams
+
+```{r, echo=TRUE}
+# Tokenizer function to get bigrams
+bigram <- biGramTokenizer(textCorpus)
+bigram <- data.frame(table(bigram))
+bigram <- bigram[order(bigram$Freq,decreasing = TRUE),]
+names(bigram) <- c("words","freq")
+head(bigram)
+bigram$words <- as.character(bigram$words)
+```
+
+### Plotting BIGRAM
+```{r}
+bigramPlot <- ggplot(data=bigram[1:10,], aes(x = reorder(words,freq), y = freq))+
+  geom_bar(stat="identity", fill = "steelblue")  +
+  ggtitle("Frequently used Words") + 
+  geom_text(data = bigram[1:10,], aes(x = words, y = freq, label = freq), hjust=5, position = "identity") + 
+  labs(y="Frequency",x="Words") + coord_flip()
+bigramPlot
+```
+
+```{r}
+#Splitting the words into 2 strings
+str2 <- strsplit(bigram$words,split=" ")
+bigram <- transform(bigram, 
+                    one = sapply(str2,"[[",1),   
+                    two = sapply(str2,"[[",2))
+bigram <- data.frame(word1 = bigram$one,word2 = bigram$two,freq = bigram$freq,stringsAsFactors=FALSE)
+## saving files 
+write.csv(bigram[bigram$freq > 1,],"bigram.csv",row.names=F)
+bigram <- read.csv("bigram.csv",stringsAsFactors = F)
+saveRDS(bigram,"bigram.RData")
+``` 
+
+
+### Obtaining the triGrams
+
+```{r, echo=TRUE}
+# Tokenizer function to get trigrams
+trigram <- triGramTokenizer(textCorpus)
+trigram <- data.frame(table(trigram))
+trigram <- trigram[order(trigram$Freq,decreasing = TRUE),]
+names(trigram) <- c("words","freq")
+head(trigram)
+```
+
+### Plotting TRIGRAM
+```{r}
+trigramPlot <- ggplot(data=trigram[1:10,], aes(x = reorder(words,freq), y = freq))+
+  geom_bar(stat="identity", fill = "steelblue")  +
+  ggtitle("Frequently used Words") + 
+  geom_text(data = trigram[1:10,], aes(x = words, y = freq, label = freq), hjust=2, position = "identity") + 
+  labs(y="Frequency",x="Words") + coord_flip()
+trigramPlot
+```
+
+```{r}
+# Splitting the trigram words into individual words
+trigram$words <- as.character(trigram$words)
+str3 <- strsplit(trigram$words,split=" ")
+trigram <- transform(trigram,
+                     one = sapply(str3,"[[",1),
+                     two = sapply(str3,"[[",2),
+                     three = sapply(str3,"[[",3))
+# trigram$words <- NULL
+trigram <- data.frame(word1 = trigram$one,word2 = trigram$two, 
+                      word3 = trigram$three, freq = trigram$freq,stringsAsFactors=FALSE)
+# saving files
+write.csv(trigram[trigram$freq > 1,],"trigram.csv",row.names=F)
+trigram <- read.csv("trigram.csv",stringsAsFactors = F)
+saveRDS(trigram,"trigram.RData")
+``` 
+
+### Obtaining the quadGrams
+
+```{r, echo=TRUE}
+# Tokenizer function to get quadgrams
+quadgram <- quadGramTokenizer(textCorpus)
+quadgram <- data.frame(table(quadgram))
+quadgram <- quadgram[order(quadgram$Freq,decreasing = TRUE),]
+names(quadgram) <- c("words","freq")
+quadgram$words <- as.character(quadgram$words)
+head(quadgram)
+```
+
+### Plotting QUADGRAM
+```{r}
+quadgramPlot <- ggplot(data=quadgram[1:10,], aes(x = reorder(words,freq), y = freq))+
+  geom_bar(stat="identity", fill = "steelblue")  +
+  ggtitle("Frequently used Words") + 
+  geom_text(data = quadgram[1:10,], aes(x = words, y = freq, label = freq), hjust=5, position = "identity") + 
+  labs(y="Frequency",x="Words") + coord_flip()
+quadgramPlot
+```
+
+```{r}
+#splitting the quadgram into 4 words
+str4 <- strsplit(quadgram$words,split=" ")
+quadgram <- transform(quadgram,
+                      one = sapply(str4,"[[",1),
+                      two = sapply(str4,"[[",2),
+                      three = sapply(str4,"[[",3), 
+                      four = sapply(str4,"[[",4))
+# quadgram$words <- NULL
+quadgram <- data.frame(word1 = quadgram$one,
+                       word2 = quadgram$two, 
+                       word3 = quadgram$three, 
+                       word4 = quadgram$four, 
+                       freq = quadgram$freq, stringsAsFactors=FALSE)
+# saving files
+write.csv(quadgram[quadgram$freq > 1,],"quadgram.csv",row.names=F)
+quadgram <- read.csv("quadgram.csv",stringsAsFactors = F)
+saveRDS(quadgram,"quadgram.RData")
+``` 
+
+
+## Further considerations
+
+* All the process from reading the file, cleaning and creating the n-grams is time-consuming for your computer.
+* NLP uses intensive computer resource and is necessary a lot of tests get n-grams efficient keeping minimum files sizes.
+* The techniques of removing words (cleaning) sometimes is not precise as we can suppose.
+* Increasing the quality of n-gram tokenization could be critical to prediction accuracy at the prediction algorithm.
+
+## Next Goal
+
+* Build a Shiny app to allow the user input the word to obtain a suggestion of the next word. 
+* Develop the prediction algorithm implemented in Shiny app. 
+* Prepare a pitch about the app and publish it at "shinyapps.io" server.
+
